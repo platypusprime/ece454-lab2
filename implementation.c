@@ -110,18 +110,18 @@ unsigned char *processMirrorY(unsigned char *buffer_frame, unsigned width, unsig
  **********************************************************************************************************************/
 void print_team_info(){
     // Please modify this field with something interesting
-    char team_name[] = "default-name";
+    char team_name[] = "shoe-crew";
 
     // Please fill in your information
-    char student1_first_name[] = "john";
-    char student1_last_name[] = "doe";
-    char student1_student_number[] = "0000000000";
+    char student1_first_name[] = "Xiuyan";
+    char student1_last_name[] = "Yu";
+    char student1_student_number[] = "1000756719";
 
     // Please fill in your partner's information
     // If yon't have partner, do not modify this
-    char student2_first_name[] = "joe";
-    char student2_last_name[] = "doe";
-    char student2_student_number[] = "0000000001";
+    char student2_first_name[] = "Jingchen";
+    char student2_last_name[] = "Xu";
+    char student2_student_number[] = "1000544574";
 
     // Printing out team information
     printf("*******************************************************************************************************\n");
