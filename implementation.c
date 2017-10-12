@@ -135,6 +135,43 @@ void print_team_info(){
     printf("\tstudent2_student_number: %s\n", student2_student_number);
 }
 
+void process_transform(int x, int y, int r, bool mx, bool my, unsigned char *frame_buffer, unsigned int width, unsigned int height) {
+    // printf("Handling transformation: x=%d, y=%d, r=%d, mx=%d, my=%d\n", x, y, r, mx, my);
+
+    // handle translations
+    if (x != 0) {
+        // printf("Moving horizontally by %d\n", x);
+        frame_buffer = processMoveRight(frame_buffer, width, height, x);
+    }
+    if (y != 0) {
+        // printf("Moving vertically by %d\n", y);
+        frame_buffer = processMoveUp(frame_buffer, width, height, y);
+    }
+
+    // handle rotations
+    if (r == 1) {
+        // printf("Rotating CW\n");
+        frame_buffer = processRotateCW(frame_buffer, width, height, 1);
+    } else if (r == 3) {
+        // printf("Rotating CCW\n");
+        frame_buffer = processRotateCCW(frame_buffer, width, height, 1);
+    } else if (r == 2) {
+        // printf("Converting 180 rotation to double flip\n");
+        mx = !mx;
+        my = !my;
+    }
+
+    // handle mirrors
+    if (mx) {
+        // printf("Flipping along x\n");
+        frame_buffer = processMirrorX(frame_buffer, width, height, 0);
+    }
+    if (my) {
+        // printf("Flipping along y\n");
+        frame_buffer = processMirrorY(frame_buffer, width, height, 0);
+    }
+}
+
 /***********************************************************************************************************************
  * WARNING: Do not modify the implementation_driver and team info prototype (name, parameter, return value) !!!
  *          You can modify anything else in this file
@@ -150,39 +187,114 @@ void print_team_info(){
  **********************************************************************************************************************/
 void implementation_driver(struct kv *sensor_values, int sensor_values_count, unsigned char *frame_buffer,
                            unsigned int width, unsigned int height, bool grading_mode) {
-    int processed_frames = 0;
-    for (int sensorValueIdx = 0; sensorValueIdx < sensor_values_count; sensorValueIdx++) {
-//        printf("Processing sensor value #%d: %s, %d\n", sensorValueIdx, sensor_values[sensorValueIdx].key,
-//               sensor_values[sensorValueIdx].value);
-        if (!strcmp(sensor_values[sensorValueIdx].key, "W")) {
-            frame_buffer = processMoveUp(frame_buffer, width, height, sensor_values[sensorValueIdx].value);
-//            printBMP(width, height, frame_buffer);
-        } else if (!strcmp(sensor_values[sensorValueIdx].key, "A")) {
-            frame_buffer = processMoveLeft(frame_buffer, width, height, sensor_values[sensorValueIdx].value);
-//            printBMP(width, height, frame_buffer);
-        } else if (!strcmp(sensor_values[sensorValueIdx].key, "S")) {
-            frame_buffer = processMoveDown(frame_buffer, width, height, sensor_values[sensorValueIdx].value);
-//            printBMP(width, height, frame_buffer);
-        } else if (!strcmp(sensor_values[sensorValueIdx].key, "D")) {
-            frame_buffer = processMoveRight(frame_buffer, width, height, sensor_values[sensorValueIdx].value);
-//            printBMP(width, height, frame_buffer);
-        } else if (!strcmp(sensor_values[sensorValueIdx].key, "CW")) {
-            frame_buffer = processRotateCW(frame_buffer, width, height, sensor_values[sensorValueIdx].value);
-//            printBMP(width, height, frame_buffer);
-        } else if (!strcmp(sensor_values[sensorValueIdx].key, "CCW")) {
-            frame_buffer = processRotateCCW(frame_buffer, width, height, sensor_values[sensorValueIdx].value);
-//            printBMP(width, height, frame_buffer);
-        } else if (!strcmp(sensor_values[sensorValueIdx].key, "MX")) {
-            frame_buffer = processMirrorX(frame_buffer, width, height, sensor_values[sensorValueIdx].value);
-//            printBMP(width, height, frame_buffer);
-        } else if (!strcmp(sensor_values[sensorValueIdx].key, "MY")) {
-            frame_buffer = processMirrorY(frame_buffer, width, height, sensor_values[sensorValueIdx].value);
-//            printBMP(width, height, frame_buffer);
+    int x = 0;
+    int y = 0;
+    int r = 0;
+    bool mx = false;
+    bool my = false;
+
+    int transMod[4][2] = {{0, 1}, {-1, 0}, {0, -1}, {1, 0}};
+    int rMod = 1;
+
+    for (int sensorValueIdx = 0; sensorValueIdx < sensor_values_count;) {
+        // printf("Reading sensor value #%d: %s, %d\n", sensorValueIdx, sensor_values[sensorValueIdx].key,
+        //     sensor_values[sensorValueIdx].value);
+
+        char* incomingKey = sensor_values[sensorValueIdx].key;
+        int incomingVal = sensor_values[sensorValueIdx].value;
+
+        if (*incomingKey == 'W') {
+            x += transMod[0][0] * incomingVal;
+            y += transMod[0][1] * incomingVal;
+
+        } else if (*incomingKey == 'A') {
+            x += transMod[1][0] * incomingVal;
+            y += transMod[1][1] * incomingVal;
+
+        } else if (*incomingKey == 'S') {
+            x += transMod[2][0] * incomingVal;
+            y += transMod[2][1] * incomingVal;
+
+        } else if (*incomingKey == 'D') {
+            x += transMod[3][0] * incomingVal;
+            y += transMod[3][1] * incomingVal;
+
+        } else if (*incomingKey == 'C') {
+            if (incomingKey[1] == 'C') { // "CCW"
+                incomingVal *= -1;
+            }
+            incomingVal %= 4;
+            r += (incomingVal * rMod);
+
+            if (incomingVal == 1){
+                int temp[] = {transMod[0][0], transMod[0][1]};
+                for (int i = 0; i < 3; i++){
+                    transMod[i][0] = transMod[i+1][0];
+                    transMod[i][1] = transMod[i+1][1];
+                }
+                transMod[3][0] = temp[0];
+                transMod[3][1] = temp[1];
+
+            } else if (incomingVal == 2) {
+                int temp[] = {transMod[0][0], transMod[0][1]};
+                transMod[0][0] = transMod[2][0];
+                transMod[0][1] = transMod[2][1];
+                transMod[2][0] = temp[0];
+                transMod[2][1] = temp[1];
+                temp[0] = transMod[1][0];
+                temp[1] = transMod[1][1];
+                transMod[1][0] = transMod[3][0];
+                transMod[1][1] = transMod[3][1];
+                transMod[3][0] = temp[0];
+                transMod[3][1] = temp[1];
+
+            } else if (incomingVal == 3) {
+                int temp[] = {transMod[3][0], transMod[3][1]};
+                for (int i = 3; i > 0; i--){
+                    transMod[i][0] = transMod[i-1][0];
+                    transMod[i][1] = transMod[i-1][1];
+                }
+                transMod[0][0] = temp[0];
+                transMod[0][1] = temp[1];
+            }
+
+        } else if (*incomingKey == 'M') {
+            if (incomingKey[1] == 'X') { // "MX"
+                mx = !mx;
+                for (int i = 0; i < 4; i++) transMod[i][0] *= -1;
+            } else {                     // "MY"
+                my = !my;
+                for (int i = 0; i < 4; i++) transMod[i][1] *= -1;
+            }
+
+            rMod *= -1;
         }
-        processed_frames += 1;
-        if (processed_frames % 25 == 0) {
+
+        // do verification every 25, just like reference impl
+        if (++sensorValueIdx % 25 == 0) {
+            r %= 4;
+            process_transform(x, y, r, mx, my, frame_buffer, width, height);
             verifyFrame(frame_buffer, width, height, grading_mode);
+
+            // reset vars
+            x = 0;
+            y = 0;
+            r = 0;
+            mx = false;
+            my = false;
+            transMod[0][0] = 0;
+            transMod[0][1] = 1;
+            transMod[1][0] = -1;
+            transMod[1][1] = 0;
+            transMod[2][0] = 0;
+            transMod[2][1] = -1;
+            transMod[3][0] = 1;
+            transMod[3][1] = 0;
+            rMod = 1;
         }
     }
+
+    r %= 4;
+    process_transform(x, y, r, mx, my, frame_buffer, width, height);
     return;
 }
