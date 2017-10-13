@@ -16,7 +16,14 @@ int num_bytes_row;
  * Note2: You can assume the object will never be moved off the screen
  **********************************************************************************************************************/
 unsigned char *processMoveUp(unsigned char *buffer_frame, unsigned width, unsigned height, int offset) {
-    return processMoveUpReference(buffer_frame, width, height, offset);
+    int num_bytes_leftover = offset * num_bytes_row;
+    int num_bytes_shifted = (height - offset) * num_bytes_row;
+
+    memmove(&buffer_frame[0], &buffer_frame[num_bytes_leftover], num_bytes_shifted);
+    memset(&buffer_frame[num_bytes_shifted], 255, num_bytes_leftover);
+
+    // return a pointer to the updated image buffer
+    return buffer_frame;
 }
 
 /***********************************************************************************************************************
@@ -28,7 +35,7 @@ unsigned char *processMoveUp(unsigned char *buffer_frame, unsigned width, unsign
  * Note1: White pixels RGB(255,255,255) are treated as background. Object in the image refers to non-white pixels.
  * Note2: You can assume the object will never be moved off the screen
  **********************************************************************************************************************/
-unsigned char *processMoveRight(unsigned char *buffer_frame, unsigned char *rendered_frame, unsigned width, unsigned height, int offset) {
+unsigned char *processMoveRight(unsigned char *buffer_frame, unsigned width, unsigned height, int offset) {
     int num_bytes_leftover = offset * 3;
     int num_bytes_shifted = num_bytes_row - num_bytes_leftover; // (width - offset) * 3
 
@@ -36,17 +43,14 @@ unsigned char *processMoveRight(unsigned char *buffer_frame, unsigned char *rend
     int cpy_start = 0; // row * width * 3 + (column - offset) * 3
     for (int row = 0; row < height; row++) {
         // fill [0, offset) with white pixels
-        memset(&rendered_frame[cpy_start], 255, num_bytes_leftover);
+        memset(&buffer_frame[cpy_start], 255, num_bytes_leftover);
 
         // shift pixels from [0, width-offset) to [offset, width)
-        memcpy(&rendered_frame[dst_start], &buffer_frame[cpy_start], num_bytes_shifted);
+        memmove(&buffer_frame[dst_start], &buffer_frame[cpy_start], num_bytes_shifted);
 
         dst_start += num_bytes_row;
         cpy_start += num_bytes_row;
     }
-
-    // copy the temporary buffer back to original frame buffer
-    buffer_frame = copyFrame(rendered_frame, buffer_frame, width, height);
 
     // return a pointer to the updated image buffer
     return buffer_frame;
@@ -62,7 +66,13 @@ unsigned char *processMoveRight(unsigned char *buffer_frame, unsigned char *rend
  * Note2: You can assume the object will never be moved off the screen
  **********************************************************************************************************************/
 unsigned char *processMoveDown(unsigned char *buffer_frame, unsigned width, unsigned height, int offset) {
-    return processMoveDownReference(buffer_frame, width, height, offset);
+    int num_bytes_leftover = offset * num_bytes_row;
+
+    memmove(&buffer_frame[num_bytes_leftover], &buffer_frame[0], (height - offset) * num_bytes_row);
+    memset(&buffer_frame[0], 255, num_bytes_leftover);
+
+    // return a pointer to the updated image buffer
+    return buffer_frame;
 }
 
 /***********************************************************************************************************************
@@ -74,7 +84,7 @@ unsigned char *processMoveDown(unsigned char *buffer_frame, unsigned width, unsi
  * Note1: White pixels RGB(255,255,255) are treated as background. Object in the image refers to non-white pixels.
  * Note2: You can assume the object will never be moved off the screen
  **********************************************************************************************************************/
-unsigned char *processMoveLeft(unsigned char *buffer_frame, unsigned char *rendered_frame, unsigned width, unsigned height, int offset) {
+unsigned char *processMoveLeft(unsigned char *buffer_frame, unsigned width, unsigned height, int offset) {
     int num_bytes_leftover = offset * 3;
     int num_bytes_shifted = num_bytes_row - num_bytes_leftover; // (width - offset) * 3
 
@@ -83,18 +93,15 @@ unsigned char *processMoveLeft(unsigned char *buffer_frame, unsigned char *rende
     int leftover_start = num_bytes_shifted; // row * width * 3 + (width - offset) * 3;
     for (int row = 0; row < height; row++) {
         // shift pixels from [offset, width) to [0, width-offset)
-        memcpy(&rendered_frame[dst_start], &buffer_frame[cpy_start], num_bytes_shifted);
+        memmove(&buffer_frame[dst_start], &buffer_frame[cpy_start], num_bytes_shifted);
 
         // fill [width-offset, width) with white pixels
-        memset(&rendered_frame[leftover_start], 255, num_bytes_leftover);
+        memset(&buffer_frame[leftover_start], 255, num_bytes_leftover);
 
         dst_start += num_bytes_row;
         cpy_start += num_bytes_row;
         leftover_start += num_bytes_row;
     }
-
-    // copy the temporary buffer back to original frame buffer
-    buffer_frame = copyFrame(rendered_frame, buffer_frame, width, height);
 
     // return a pointer to the updated image buffer
     return buffer_frame;
@@ -154,18 +161,18 @@ unsigned char *processMirrorY(unsigned char *buffer_frame, unsigned width, unsig
  **********************************************************************************************************************/
 void print_team_info(){
     // Please modify this field with something interesting
-    char team_name[] = "shoe-crew";
+    char team_name[] = "the-loneliest-number";
 
     // Please fill in your information
-    char student1_first_name[] = "Xiuyan";
-    char student1_last_name[] = "Yu";
-    char student1_student_number[] = "1000756719";
+    char student1_first_name[] = "Jingchen";
+    char student1_last_name[] = "Xu";
+    char student1_student_number[] = "1000544574";
 
     // Please fill in your partner's information
     // If yon't have partner, do not modify this
-    char student2_first_name[] = "Jingchen";
-    char student2_last_name[] = "Xu";
-    char student2_student_number[] = "1000544574";
+    char student2_first_name[] = "joe";
+    char student2_last_name[] = "doe";
+    char student2_student_number[] = "0000000001";
 
     // Printing out team information
     printf("*******************************************************************************************************\n");
@@ -185,10 +192,10 @@ void process_transform(int x, int y, int r, bool mx, bool my, unsigned char *fra
     // handle translations
     if (x > 0) {
         // printf("Moving right by %d\n", x);
-        frame_buffer = processMoveRight(frame_buffer, temp_buffer, width, height, x);
+        frame_buffer = processMoveRight(frame_buffer, width, height, x);
     } else if (x < 0){
         // printf("Moving left by %d\n", x * -1);
-        frame_buffer = processMoveLeft(frame_buffer, temp_buffer, width, height, x * -1);
+        frame_buffer = processMoveLeft(frame_buffer, width, height, x * -1);
     }
     if (y > 0) {
         // printf("Moving up by %d\n", y);
@@ -261,7 +268,9 @@ void implementation_driver(struct kv *sensor_values, int sensor_values_count, un
     int temp[2];
     int rMod = 1;
 
-    for (int sensorValueIdx = 0; sensorValueIdx < sensor_values_count;) {
+    int valid_sensor_values_count = (sensor_values_count / 25) * 25;
+
+    for (int sensorValueIdx = 0; sensorValueIdx < valid_sensor_values_count;) {
         // printf("---\nReading sensor value #%d: %s, %d\n", sensorValueIdx, sensor_values[sensorValueIdx].key,
         //     sensor_values[sensorValueIdx].value);
 
