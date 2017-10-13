@@ -4,6 +4,8 @@
 #include "utilities.h"  // DO NOT REMOVE this line
 #include "implementation_reference.h"   // DO NOT REMOVE this line
 
+int num_bytes_row;
+
 /***********************************************************************************************************************
  * @param buffer_frame - pointer pointing to a buffer storing the imported 24-bit bitmap image
  * @param width - width of the imported 24-bit bitmap image
@@ -26,8 +28,28 @@ unsigned char *processMoveUp(unsigned char *buffer_frame, unsigned width, unsign
  * Note1: White pixels RGB(255,255,255) are treated as background. Object in the image refers to non-white pixels.
  * Note2: You can assume the object will never be moved off the screen
  **********************************************************************************************************************/
-unsigned char *processMoveRight(unsigned char *buffer_frame, unsigned width, unsigned height, int offset) {
-    return processMoveRightReference(buffer_frame, width, height, offset);
+unsigned char *processMoveRight(unsigned char *buffer_frame, unsigned char *rendered_frame, unsigned width, unsigned height, int offset) {
+    int num_bytes_leftover = offset * 3;
+    int num_bytes_shifted = num_bytes_row - num_bytes_leftover; // (width - offset) * 3
+
+    int dst_start = num_bytes_leftover; // row * width * 3 + column * 3
+    int cpy_start = 0; // row * width * 3 + (column - offset) * 3
+    for (int row = 0; row < height; row++) {
+        // fill [0, offset) with white pixels
+        memset(&rendered_frame[cpy_start], 255, num_bytes_leftover);
+
+        // shift pixels from [0, width-offset) to [offset, width)
+        memcpy(&rendered_frame[dst_start], &buffer_frame[cpy_start], num_bytes_shifted);
+
+        dst_start += num_bytes_row;
+        cpy_start += num_bytes_row;
+    }
+
+    // copy the temporary buffer back to original frame buffer
+    buffer_frame = copyFrame(rendered_frame, buffer_frame, width, height);
+
+    // return a pointer to the updated image buffer
+    return buffer_frame;
 }
 
 /***********************************************************************************************************************
@@ -52,8 +74,30 @@ unsigned char *processMoveDown(unsigned char *buffer_frame, unsigned width, unsi
  * Note1: White pixels RGB(255,255,255) are treated as background. Object in the image refers to non-white pixels.
  * Note2: You can assume the object will never be moved off the screen
  **********************************************************************************************************************/
-unsigned char *processMoveLeft(unsigned char *buffer_frame, unsigned width, unsigned height, int offset) {
-    return processMoveLeftReference(buffer_frame, width, height, offset);
+unsigned char *processMoveLeft(unsigned char *buffer_frame, unsigned char *rendered_frame, unsigned width, unsigned height, int offset) {
+    int num_bytes_leftover = offset * 3;
+    int num_bytes_shifted = num_bytes_row - num_bytes_leftover; // (width - offset) * 3
+
+    int dst_start = 0; // row * width * 3
+    int cpy_start = num_bytes_leftover; // row * width * 3 + offset * 3;
+    int leftover_start = num_bytes_shifted; // row * width * 3 + (width - offset) * 3;
+    for (int row = 0; row < height; row++) {
+        // shift pixels from [offset, width) to [0, width-offset)
+        memcpy(&rendered_frame[dst_start], &buffer_frame[cpy_start], num_bytes_shifted);
+
+        // fill [width-offset, width) with white pixels
+        memset(&rendered_frame[leftover_start], 255, num_bytes_leftover);
+
+        dst_start += num_bytes_row;
+        cpy_start += num_bytes_row;
+        leftover_start += num_bytes_row;
+    }
+
+    // copy the temporary buffer back to original frame buffer
+    buffer_frame = copyFrame(rendered_frame, buffer_frame, width, height);
+
+    // return a pointer to the updated image buffer
+    return buffer_frame;
 }
 
 /***********************************************************************************************************************
@@ -135,17 +179,23 @@ void print_team_info(){
     printf("\tstudent2_student_number: %s\n", student2_student_number);
 }
 
-void process_transform(int x, int y, int r, bool mx, bool my, unsigned char *frame_buffer, unsigned int width, unsigned int height) {
+void process_transform(int x, int y, int r, bool mx, bool my, unsigned char *frame_buffer, unsigned char *temp_buffer, unsigned int width, unsigned int height) {
     // printf("---\nHandling transformation: x=%d, y=%d, r=%d, mx=%d, my=%d\n", x, y, r, mx, my);
 
     // handle translations
-    if (x != 0) {
-        // printf("Moving horizontally by %d\n", x);
-        frame_buffer = processMoveRight(frame_buffer, width, height, x);
+    if (x > 0) {
+        // printf("Moving right by %d\n", x);
+        frame_buffer = processMoveRight(frame_buffer, temp_buffer, width, height, x);
+    } else if (x < 0){
+        // printf("Moving left by %d\n", x * -1);
+        frame_buffer = processMoveLeft(frame_buffer, temp_buffer, width, height, x * -1);
     }
-    if (y != 0) {
-        // printf("Moving vertically by %d\n", y);
+    if (y > 0) {
+        // printf("Moving up by %d\n", y);
         frame_buffer = processMoveUp(frame_buffer, width, height, y);
+    } else if (y < 0){
+        // printf("Moving down by %d\n", y * -1);
+        frame_buffer = processMoveDown(frame_buffer, width, height, y * -1);
     }
 
     // assimilate double-mirrors into rotations
@@ -196,6 +246,11 @@ void process_transform(int x, int y, int r, bool mx, bool my, unsigned char *fra
  **********************************************************************************************************************/
 void implementation_driver(struct kv *sensor_values, int sensor_values_count, unsigned char *frame_buffer,
                            unsigned int width, unsigned int height, bool grading_mode) {
+    // allocate memory for temporary image buffer
+    unsigned char *temp_buffer = allocateFrame(width, height);
+
+    num_bytes_row = width * 3;
+
     int x = 0;
     int y = 0;
     int r = 0;
@@ -311,7 +366,7 @@ void implementation_driver(struct kv *sensor_values, int sensor_values_count, un
 
         // do verification every 25, just like reference impl
         if (++sensorValueIdx % 25 == 0) {
-            process_transform(x, y, r, mx, my, frame_buffer, width, height);
+            process_transform(x, y, r, mx, my, frame_buffer, temp_buffer, width, height);
             // printBMP(width, height, frame_buffer);
             verifyFrame(frame_buffer, width, height, grading_mode);
 
@@ -333,6 +388,9 @@ void implementation_driver(struct kv *sensor_values, int sensor_values_count, un
         }
     }
 
-    process_transform(x, y, r, mx, my, frame_buffer, width, height);
+    process_transform(x, y, r, mx, my, frame_buffer, temp_buffer, width, height);
+
+    // free temporary image buffer
+    deallocateFrame(temp_buffer);
     return;
 }
