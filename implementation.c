@@ -136,7 +136,7 @@ void print_team_info(){
 }
 
 void process_transform(int x, int y, int r, bool mx, bool my, unsigned char *frame_buffer, unsigned int width, unsigned int height) {
-    // printf("Handling transformation: x=%d, y=%d, r=%d, mx=%d, my=%d\n", x, y, r, mx, my);
+    // printf("---\nHandling transformation: x=%d, y=%d, r=%d, mx=%d, my=%d\n", x, y, r, mx, my);
 
     // handle translations
     if (x != 0) {
@@ -148,6 +148,17 @@ void process_transform(int x, int y, int r, bool mx, bool my, unsigned char *fra
         frame_buffer = processMoveUp(frame_buffer, width, height, y);
     }
 
+    // assimilate double-mirrors into rotations
+    if (mx && my) {
+        // printf("Combining double-mirror into 180 deg rotation\n");
+        r += 2;
+        mx = false;
+        my = false;
+    }
+
+    r = (r % 4 + 4) % 4; // positive modulo
+    // printf("Reduced rotation to %d turns CW\n", r);
+
     // handle rotations
     if (r == 1) {
         // printf("Rotating CW\n");
@@ -156,18 +167,16 @@ void process_transform(int x, int y, int r, bool mx, bool my, unsigned char *fra
         // printf("Rotating CCW\n");
         frame_buffer = processRotateCCW(frame_buffer, width, height, 1);
     } else if (r == 2) {
-        // printf("Converting 180 rotation to double flip\n");
-        mx = !mx;
-        my = !my;
+        // printf("Rotating 180 degs\n");
+        frame_buffer = processRotateCW(frame_buffer, width, height, 2); // TODO replace with rotate 180
     }
 
     // handle mirrors
     if (mx) {
-        // printf("Flipping along x\n");
+        // printf("Flipping along x-axis\n");
         frame_buffer = processMirrorX(frame_buffer, width, height, 0);
-    }
-    if (my) {
-        // printf("Flipping along y\n");
+    } else if (my) {
+        // printf("Flipping along y-axis\n");
         frame_buffer = processMirrorY(frame_buffer, width, height, 0);
     }
 }
@@ -193,87 +202,117 @@ void implementation_driver(struct kv *sensor_values, int sensor_values_count, un
     bool mx = false;
     bool my = false;
 
-    int transMod[4][2] = {{0, 1}, {-1, 0}, {0, -1}, {1, 0}};
+    int tMod[4][2] = {{0, 1}, {-1, 0}, {0, -1}, {1, 0}};
+    int temp[2];
     int rMod = 1;
 
     for (int sensorValueIdx = 0; sensorValueIdx < sensor_values_count;) {
-        // printf("Reading sensor value #%d: %s, %d\n", sensorValueIdx, sensor_values[sensorValueIdx].key,
+        // printf("---\nReading sensor value #%d: %s, %d\n", sensorValueIdx, sensor_values[sensorValueIdx].key,
         //     sensor_values[sensorValueIdx].value);
 
         char* incomingKey = sensor_values[sensorValueIdx].key;
         int incomingVal = sensor_values[sensorValueIdx].value;
 
         if (*incomingKey == 'W') {
-            x += transMod[0][0] * incomingVal;
-            y += transMod[0][1] * incomingVal;
+            // printf("Adding translation of (%d, %d)\n", tMod[0][0] * incomingVal, tMod[0][1] * incomingVal);
+            x += tMod[0][0] * incomingVal;
+            y += tMod[0][1] * incomingVal;
 
         } else if (*incomingKey == 'A') {
-            x += transMod[1][0] * incomingVal;
-            y += transMod[1][1] * incomingVal;
+            // printf("Adding translation of (%d, %d)\n", tMod[1][0] * incomingVal, tMod[1][1] * incomingVal);
+            x += tMod[1][0] * incomingVal;
+            y += tMod[1][1] * incomingVal;
 
         } else if (*incomingKey == 'S') {
-            x += transMod[2][0] * incomingVal;
-            y += transMod[2][1] * incomingVal;
+            // printf("Adding translation of (%d, %d)\n", tMod[2][0] * incomingVal, tMod[2][1] * incomingVal);
+            x += tMod[2][0] * incomingVal;
+            y += tMod[2][1] * incomingVal;
 
         } else if (*incomingKey == 'D') {
-            x += transMod[3][0] * incomingVal;
-            y += transMod[3][1] * incomingVal;
+            // printf("Adding translation of (%d, %d)\n", tMod[3][0] * incomingVal, tMod[3][1] * incomingVal);
+            x += tMod[3][0] * incomingVal;
+            y += tMod[3][1] * incomingVal;
 
         } else if (*incomingKey == 'C') {
             if (incomingKey[1] == 'C') { // "CCW"
+                // printf("Changing CCW of %d ", incomingVal);
                 incomingVal *= -1;
+                // printf("to CW of %d\n", incomingVal);
             }
-            incomingVal %= 4;
+
+            // incomingVal *= rMod;
+            // // printf("Mirror mod to %d\n", incomingVal);
+
+            incomingVal = (incomingVal % 4 + 4) % 4; // positive modulo
+            // printf("Reduced CW to %d\n", incomingVal);
+
             r += (incomingVal * rMod);
+            // r += incomingVal;
 
             if (incomingVal == 1){
-                int temp[] = {transMod[0][0], transMod[0][1]};
+                // printf("Rotating translation modifiers CCWx1\n");
+                temp[0] = tMod[0][0];
+                temp[1] = tMod[0][1];
                 for (int i = 0; i < 3; i++){
-                    transMod[i][0] = transMod[i+1][0];
-                    transMod[i][1] = transMod[i+1][1];
+                    tMod[i][0] = tMod[i+1][0];
+                    tMod[i][1] = tMod[i+1][1];
                 }
-                transMod[3][0] = temp[0];
-                transMod[3][1] = temp[1];
+                tMod[3][0] = temp[0];
+                tMod[3][1] = temp[1];
 
             } else if (incomingVal == 2) {
-                int temp[] = {transMod[0][0], transMod[0][1]};
-                transMod[0][0] = transMod[2][0];
-                transMod[0][1] = transMod[2][1];
-                transMod[2][0] = temp[0];
-                transMod[2][1] = temp[1];
-                temp[0] = transMod[1][0];
-                temp[1] = transMod[1][1];
-                transMod[1][0] = transMod[3][0];
-                transMod[1][1] = transMod[3][1];
-                transMod[3][0] = temp[0];
-                transMod[3][1] = temp[1];
+                // printf("Flipping both translation modifiers\n");
+                for (int i = 0; i < 4; i++) {
+                    tMod[i][0] *= -1;
+                    tMod[i][1] *= -1;
+                }
 
             } else if (incomingVal == 3) {
-                int temp[] = {transMod[3][0], transMod[3][1]};
+                // printf("Rotating translation modifiers CWx1\n");
+                temp[0] = tMod[3][0];
+                temp[1] = tMod[3][1];
                 for (int i = 3; i > 0; i--){
-                    transMod[i][0] = transMod[i-1][0];
-                    transMod[i][1] = transMod[i-1][1];
+                    tMod[i][0] = tMod[i-1][0];
+                    tMod[i][1] = tMod[i-1][1];
                 }
-                transMod[0][0] = temp[0];
-                transMod[0][1] = temp[1];
+                tMod[0][0] = temp[0];
+                tMod[0][1] = temp[1];
             }
 
         } else if (*incomingKey == 'M') {
             if (incomingKey[1] == 'X') { // "MX"
+                // printf("Swapping modifiers for W and S\n");
                 mx = !mx;
-                for (int i = 0; i < 4; i++) transMod[i][0] *= -1;
+                temp[0] = tMod[2][0];
+                temp[1] = tMod[2][1];
+                tMod[2][0] = tMod[0][0];
+                tMod[2][1] = tMod[0][1];
+                tMod[0][0] = temp[0];
+                tMod[0][1] = temp[1];
+
             } else {                     // "MY"
+                // printf("Swapping modifiers for A and D\n");
                 my = !my;
-                for (int i = 0; i < 4; i++) transMod[i][1] *= -1;
+                temp[0] = tMod[3][0];
+                temp[1] = tMod[3][1];
+                tMod[3][0] = tMod[1][0];
+                tMod[3][1] = tMod[1][1];
+                tMod[1][0] = temp[0];
+                tMod[1][1] = temp[1];
+
             }
 
+            // printf("Flipping rotation modifier\n");
             rMod *= -1;
         }
 
+        // printf("CURRENT TRANSFORMATION: x=%d, y=%d, r=%d, mx=%d, my=%d\n", x, y, r, mx, my);
+        // printf("CURRENT MODIFIERS: W=(%d, %d), A=(%d, %d), S=(%d, %d), D=(%d, %d), R=%d\n", tMod[0][0], tMod[0][1], tMod[1][0], tMod[1][1], tMod[2][0], tMod[2][1], tMod[3][0], tMod[3][1], rMod);
+
         // do verification every 25, just like reference impl
         if (++sensorValueIdx % 25 == 0) {
-            r %= 4;
             process_transform(x, y, r, mx, my, frame_buffer, width, height);
+            // printBMP(width, height, frame_buffer);
             verifyFrame(frame_buffer, width, height, grading_mode);
 
             // reset vars
@@ -282,19 +321,18 @@ void implementation_driver(struct kv *sensor_values, int sensor_values_count, un
             r = 0;
             mx = false;
             my = false;
-            transMod[0][0] = 0;
-            transMod[0][1] = 1;
-            transMod[1][0] = -1;
-            transMod[1][1] = 0;
-            transMod[2][0] = 0;
-            transMod[2][1] = -1;
-            transMod[3][0] = 1;
-            transMod[3][1] = 0;
+            tMod[0][0] = 0;
+            tMod[0][1] = 1;
+            tMod[1][0] = -1;
+            tMod[1][1] = 0;
+            tMod[2][0] = 0;
+            tMod[2][1] = -1;
+            tMod[3][0] = 1;
+            tMod[3][1] = 0;
             rMod = 1;
         }
     }
 
-    r %= 4;
     process_transform(x, y, r, mx, my, frame_buffer, width, height);
     return;
 }
